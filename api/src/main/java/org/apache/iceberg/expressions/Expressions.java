@@ -107,6 +107,10 @@ public class Expressions {
     return new UnboundTransform<>(ref(name), Transforms.truncate(Types.LongType.get(), width));
   }
 
+  public static <T> UnboundTerm<T> transform(String name, Transform<?, T> transform) {
+    return new UnboundTransform<>(ref(name), transform);
+  }
+
   public static <T> UnboundPredicate<T> isNull(String name) {
     return new UnboundPredicate<>(Expression.Operation.IS_NULL, ref(name));
   }

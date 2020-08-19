@@ -33,6 +33,7 @@ public class SortField implements Serializable {
     NULLS_FIRST, NULLS_LAST
   }
 
+  // TODO: do we need name?
   private final int sourceId;
   private final Transform<?, ?> transform;
   private final Direction direction;
