@@ -255,7 +255,7 @@ public class Expressions {
     return ExpressionVisitors.visit(expr, RewriteNot.get());
   }
 
-  static <T> NamedReference<T> ref(String name) {
+  public static <T> NamedReference<T> ref(String name) {
     return new NamedReference<>(name);
   }
 }

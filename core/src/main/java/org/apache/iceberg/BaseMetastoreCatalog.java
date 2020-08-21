@@ -31,9 +31,9 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.MapMaker;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.util.Tasks;
 import org.apache.iceberg.util.ThreadPools;
@@ -48,6 +48,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
       TableIdentifier identifier,
       Schema schema,
       PartitionSpec spec,
+      SortOrder sortOrder,
       String location,
       Map<String, String> properties) {
     Preconditions.checkArgument(isValidIdentifier(identifier), "Invalid table identifier: %s", identifier);
@@ -64,8 +65,8 @@ public abstract class BaseMetastoreCatalog implements Catalog {
       baseLocation = defaultWarehouseLocation(identifier);
     }
 
-    TableMetadata metadata = TableMetadata.newTableMetadata(
-        schema, spec, baseLocation, properties == null ? Maps.newHashMap() : properties);
+    Map<String, String> tableProps = properties != null ? properties : ImmutableMap.of();
+    TableMetadata metadata = TableMetadata.newTableMetadata(schema, spec, sortOrder, baseLocation, tableProps);
 
     try {
       ops.commit(null, metadata);
@@ -81,6 +82,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
       TableIdentifier identifier,
       Schema schema,
       PartitionSpec spec,
+      SortOrder sortOrder,
       String location,
       Map<String, String> properties) {
     Preconditions.checkArgument(isValidIdentifier(identifier), "Invalid table identifier: %s", identifier);
@@ -91,8 +93,9 @@ public abstract class BaseMetastoreCatalog implements Catalog {
     }
 
     String baseLocation = location != null ? location : defaultWarehouseLocation(identifier);
-    Map<String, String> tableProperties = properties != null ? properties : Maps.newHashMap();
-    TableMetadata metadata = TableMetadata.newTableMetadata(schema, spec, baseLocation, tableProperties);
+    Map<String, String> tableProps = properties != null ? properties : ImmutableMap.of();
+    TableMetadata metadata = TableMetadata.newTableMetadata(schema, spec, sortOrder, baseLocation, tableProps);
+
     return Transactions.createTableTransaction(identifier.toString(), ops, metadata);
   }
 
@@ -101,6 +104,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
       TableIdentifier identifier,
       Schema schema,
       PartitionSpec spec,
+      SortOrder sortOrder,
       String location,
       Map<String, String> properties,
       boolean orCreate) {
@@ -110,15 +114,15 @@ public abstract class BaseMetastoreCatalog implements Catalog {
       throw new NoSuchTableException("No such table: " + identifier);
     }
 
-    Map<String, String> tableProperties = properties != null ? properties : Maps.newHashMap();
+    Map<String, String> tableProps = properties != null ? properties : ImmutableMap.of();
 
     TableMetadata metadata;
     if (ops.current() != null) {
       String baseLocation = location != null ? location : ops.current().location();
-      metadata = ops.current().buildReplacement(schema, spec, baseLocation, tableProperties);
+      metadata = ops.current().buildReplacement(schema, spec, sortOrder, baseLocation, tableProps);
     } else {
       String baseLocation = location != null ? location : defaultWarehouseLocation(identifier);
-      metadata = TableMetadata.newTableMetadata(schema, spec, baseLocation, tableProperties);
+      metadata = TableMetadata.newTableMetadata(schema, spec, sortOrder, baseLocation, tableProps);
     }
 
     if (orCreate) {

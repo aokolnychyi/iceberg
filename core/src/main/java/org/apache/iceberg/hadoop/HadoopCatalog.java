@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -158,9 +159,10 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
 
   @Override
   public Table createTable(
-      TableIdentifier identifier, Schema schema, PartitionSpec spec, String location, Map<String, String> properties) {
+      TableIdentifier identifier, Schema schema, PartitionSpec spec, SortOrder sortOrder,
+      String location, Map<String, String> properties) {
     Preconditions.checkArgument(location == null, "Cannot set a custom location for a path-based table");
-    return super.createTable(identifier, schema, spec, null, properties);
+    return super.createTable(identifier, schema, spec, sortOrder, null, properties);
   }
 
   @Override

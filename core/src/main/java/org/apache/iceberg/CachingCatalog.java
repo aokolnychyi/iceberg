@@ -67,12 +67,12 @@ public class CachingCatalog implements Catalog {
   }
 
   @Override
-  public Table createTable(TableIdentifier ident, Schema schema, PartitionSpec spec, String location,
-                           Map<String, String> properties) {
+  public Table createTable(TableIdentifier ident, Schema schema, PartitionSpec spec,
+                           SortOrder sortOrder, String location, Map<String, String> properties) {
     AtomicBoolean created = new AtomicBoolean(false);
     Table table = tableCache.get(canonicalizeIdentifier(ident), identifier -> {
       created.set(true);
-      return catalog.createTable(identifier, schema, spec, location, properties);
+      return catalog.createTable(identifier, schema, spec, sortOrder, location, properties);
     });
 
     if (!created.get()) {
@@ -84,20 +84,21 @@ public class CachingCatalog implements Catalog {
 
   @Override
   public Transaction newCreateTableTransaction(TableIdentifier ident, Schema schema, PartitionSpec spec,
-                                               String location, Map<String, String> properties) {
+                                               SortOrder sortOrder, String location, Map<String, String> properties) {
     // create a new transaction without altering the cache. the table doesn't exist until the transaction is committed.
     // if the table is created before the transaction commits, any cached version is correct and the transaction create
     // will fail. if the transaction commits before another create, then the cache will be empty.
-    return catalog.newCreateTableTransaction(ident, schema, spec, location, properties);
+    return catalog.newCreateTableTransaction(ident, schema, spec, sortOrder, location, properties);
   }
 
   @Override
   public Transaction newReplaceTableTransaction(TableIdentifier ident, Schema schema, PartitionSpec spec,
-                                                String location, Map<String, String> properties, boolean orCreate) {
+                                                SortOrder sortOrder, String location, Map<String, String> properties,
+                                                boolean orCreate) {
     // create a new transaction without altering the cache. the table doesn't change until the transaction is committed.
     // when the transaction commits, invalidate the table in the cache if it is present.
     return CommitCallbackTransaction.addCallback(
-        catalog.newReplaceTableTransaction(ident, schema, spec, location, properties, orCreate),
+        catalog.newReplaceTableTransaction(ident, schema, spec, sortOrder, location, properties, orCreate),
         () -> tableCache.invalidate(canonicalizeIdentifier(ident)));
   }
 

@@ -21,52 +21,31 @@ package org.apache.iceberg;
 
 import java.io.Serializable;
 import java.util.Objects;
-import org.apache.iceberg.transforms.Transform;
+import org.apache.iceberg.expressions.BoundTerm;
 
 public class SortField implements Serializable {
-  // TODO: make top-level?
-  public enum Direction {
-    ASC, DESC
-  }
 
-  public enum NullOrder {
-    NULLS_FIRST, NULLS_LAST
-  }
-
-  // TODO: do we need name?
-  private final int sourceId;
-  private final Transform<?, ?> transform;
-  private final Direction direction;
+  private final BoundTerm<?> term;
+  private final SortDirection direction;
   private final NullOrder nullOrder;
 
-  SortField(int sourceId, Transform<?, ?> transform, Direction direction, NullOrder nullOrder) {
-    this.sourceId = sourceId;
-    this.transform = transform;
+  SortField(BoundTerm<?> term, SortDirection direction, NullOrder nullOrder) {
+    this.term = term;
     this.direction = direction;
     this.nullOrder = nullOrder;
   }
 
-  public int sourceId() {
-    return sourceId;
+  @SuppressWarnings("unchecked")
+  public <T> BoundTerm<T> term() {
+    return (BoundTerm<T>) term;
   }
 
-  public Transform<?, ?> transform() {
-    return transform;
-  }
-
-  public Direction direction() {
+  public SortDirection direction() {
     return direction;
   }
 
   public NullOrder nullOrder() {
     return nullOrder;
-  }
-
-  public boolean sameOrder(SortField that) {
-    return sourceId == that.sourceId &&
-        transform.equals(that.transform) &&
-        direction == that.direction &&
-        nullOrder == that.nullOrder;
   }
 
   // TODO: toString
@@ -80,14 +59,13 @@ public class SortField implements Serializable {
     }
 
     SortField that = (SortField) other;
-    return sourceId == that.sourceId &&
-        transform.equals(that.transform) &&
-        direction == that.direction &&
-        nullOrder == that.nullOrder;
+    // TODO: implement equals in terms
+    return term.equals(that.term) && direction == that.direction && nullOrder == that.nullOrder;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sourceId, transform, direction, nullOrder);
+    // TODO: implement hashCode in terms
+    return Objects.hash(term, direction, nullOrder);
   }
 }

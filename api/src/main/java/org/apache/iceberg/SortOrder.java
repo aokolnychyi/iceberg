@@ -24,16 +24,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.IntStream;
+import org.apache.iceberg.expressions.BoundTerm;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.expressions.UnboundTerm;
-import org.apache.iceberg.expressions.UnboundTransform;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
-import org.apache.iceberg.transforms.Transform;
-import org.apache.iceberg.transforms.Transforms;
-import org.apache.iceberg.types.Types;
 
 public class SortOrder implements Serializable {
   // TODO: shall we reserve 0 for the unsorted order? PartitionSpec does not guarantee it?
@@ -78,7 +75,7 @@ public class SortOrder implements Serializable {
     }
 
     return IntStream.range(0, anotherSortOrder.fields.length)
-        .allMatch(index -> fields[index].sameOrder(anotherSortOrder.fields[index]));
+        .allMatch(index -> fields[index].equals(anotherSortOrder.fields[index]));
   }
 
   private List<SortField> lazyFieldList() {
@@ -111,13 +108,16 @@ public class SortOrder implements Serializable {
     return 31 * Integer.hashCode(orderId) + Arrays.hashCode(fields);
   }
 
+  public static SortOrder unsorted() {
+    return UNSORTED_ORDER;
+  }
+
   public static Builder builderFor(Schema schema) {
     return new Builder(schema);
   }
 
   // TODO: add validation
   public static class Builder {
-    // TODO: case sensitivity
     private final Schema schema;
     private final List<SortField> fields = Lists.newArrayList();
     private int orderId = 0;
@@ -128,22 +128,22 @@ public class SortOrder implements Serializable {
     }
 
     public Builder orderBy(String name) {
-      Types.NestedField column = findColumn(name);
-      UnboundTerm<?> term = Expressions.transform(name, Transforms.identity(column.type()));
-      return orderBy(term);
+      return orderBy(Expressions.ref(name));
     }
 
-    public Builder orderBy(String name, SortField.Direction direction, SortField.NullOrder nullOrder) {
-      Types.NestedField column = findColumn(name);
-      UnboundTerm<?> term = Expressions.transform(name, Transforms.identity(column.type()));
-      return orderBy(term, direction, nullOrder);
+    public Builder orderBy(String name, SortDirection direction, NullOrder nullOrder) {
+      return orderBy(Expressions.ref(name), direction, nullOrder);
     }
 
     public Builder orderBy(Term term) {
-      return orderBy(term, SortField.Direction.ASC, SortField.NullOrder.NULLS_LAST);
+      return orderBy(term, SortDirection.ASC, NullOrder.NULLS_LAST);
     }
 
-    public Builder orderBy(Term term, SortField.Direction direction, SortField.NullOrder nullOrder) {
+    public Builder orderBy(Term term, SortDirection direction, NullOrder nullOrder) {
+      Preconditions.checkArgument(term instanceof UnboundTerm, "Term must be unbound");
+      BoundTerm<?> boundTerm = ((UnboundTerm<?>) term).bind(schema.asStruct(), caseSensitive);
+      SortField sortField = new SortField(boundTerm, direction, nullOrder);
+      fields.add(sortField);
       return this;
     }
 
@@ -159,17 +159,6 @@ public class SortOrder implements Serializable {
 
     public SortOrder build() {
       return new SortOrder(schema, orderId, fields);
-    }
-
-    private Transform<?, ?> toTransform(Term term) {
-      // TODO: either build a utility class or expose asTransform on Term
-      return null;
-    }
-
-    private Types.NestedField findColumn(String name) {
-      Types.NestedField column = schema.findField(name);
-      Preconditions.checkArgument(column != null, "Cannot find column: %s", name);
-      return column;
     }
   }
 }
