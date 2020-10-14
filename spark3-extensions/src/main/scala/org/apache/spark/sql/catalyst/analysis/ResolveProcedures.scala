@@ -124,11 +124,11 @@ object ResolveProcedures extends Rule[LogicalPlan] {
       values(position) = toScalaValue(arg.expr)
     }
 
-    // assign default values to optional params
+    // assign nulls to optional params that were not set
     params.foreach {
       case p if !p.required && !nameToArgMap.contains(p.name) =>
         val position = nameToPositionMap(p.name)
-        values(position) = p.defaultValue
+        values(position) = null
       case _ =>
     }
 

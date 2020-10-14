@@ -24,15 +24,14 @@ import org.apache.spark.sql.types.DataType;
 public interface ProcedureParameter {
 
   static ProcedureParameter required(String name, DataType dataType) {
-    return new ProcedureParameterImpl(name, dataType, true, null);
+    return new ProcedureParameterImpl(name, dataType, true);
   }
 
-  static ProcedureParameter optional(String name, DataType dataType, Object defaultValue) {
-    return new ProcedureParameterImpl(name, dataType, false, defaultValue);
+  static ProcedureParameter optional(String name, DataType dataType) {
+    return new ProcedureParameterImpl(name, dataType, false);
   }
 
   String name();
   DataType dataType();
   boolean required();
-  Object defaultValue();
 }

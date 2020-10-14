@@ -25,13 +25,11 @@ class ProcedureParameterImpl implements ProcedureParameter {
   private final String name;
   private final DataType dataType;
   private final boolean required;
-  private final Object defaultValue;
 
-  ProcedureParameterImpl(String name, DataType dataType, boolean required, Object defaultValue) {
+  ProcedureParameterImpl(String name, DataType dataType, boolean required) {
     this.name = name;
     this.dataType = dataType;
     this.required = required;
-    this.defaultValue = defaultValue;
   }
 
   @Override
@@ -47,10 +45,5 @@ class ProcedureParameterImpl implements ProcedureParameter {
   @Override
   public boolean required() {
     return required;
-  }
-
-  @Override
-  public Object defaultValue() {
-    return defaultValue;
   }
 }
