@@ -20,14 +20,25 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.{Call, LogicalPlan}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Call, DynamicFileFilter, LogicalPlan, OverwriteFiles}
+import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 
 object ExtendedDataSourceV2Strategy extends Strategy {
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case c @ Call(procedure, args) =>
       CallExec(c.output, procedure.methodHandle, args) :: Nil
+    case DynamicFileFilter(scanRelation, fileFilterPlan) =>
+      val scanExec = ExtendedBatchScanExec(scanRelation.output, scanRelation.scan)
+      val dynamicFileFilter = DynamicFileFilterExec(scanExec, planLater(fileFilterPlan))
+      if (scanExec.supportsColumnar) {
+        dynamicFileFilter :: Nil
+      } else {
+        // add a projection to ensure we have UnsafeRows required by some operations
+        ProjectExec(scanRelation.output, dynamicFileFilter) :: Nil
+      }
+    case OverwriteFiles(_, batchWrite, query) =>
+      OverwriteFilesExec(batchWrite, planLater(query)) :: Nil
     case _ => Nil
   }
 }
