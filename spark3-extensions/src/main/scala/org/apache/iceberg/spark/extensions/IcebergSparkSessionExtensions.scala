@@ -21,6 +21,7 @@ package org.apache.iceberg.spark.extensions
 
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.analysis.ResolveProcedures
+import org.apache.spark.sql.catalyst.optimizer.{OptimizeConditionsInRowLevelOperations, RewriteDeleteOperations}
 import org.apache.spark.sql.catalyst.parser.extensions.IcebergSparkSqlExtensionsParser
 import org.apache.spark.sql.execution.datasources.v2.ExtendedDataSourceV2Strategy
 
@@ -29,6 +30,9 @@ class IcebergSparkSessionExtensions extends (SparkSessionExtensions => Unit) {
   override def apply(extensions: SparkSessionExtensions): Unit = {
     extensions.injectParser { case (_, parser) => new IcebergSparkSqlExtensionsParser(parser) }
     extensions.injectResolutionRule { _ => ResolveProcedures }
+    // TODO: RewriteDeleteOperations should be part of early scan push down rules
+    extensions.injectOptimizerRule { _ => OptimizeConditionsInRowLevelOperations }
+    extensions.injectOptimizerRule { _ => RewriteDeleteOperations }
     extensions.injectPlannerStrategy { _ => ExtendedDataSourceV2Strategy }
   }
 }

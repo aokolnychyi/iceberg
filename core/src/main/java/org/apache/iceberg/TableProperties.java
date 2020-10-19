@@ -134,4 +134,16 @@ public class TableProperties {
 
   public static final String ENGINE_HIVE_ENABLED = "engine.hive.enabled";
   public static final boolean ENGINE_HIVE_ENABLED_DEFAULT = false;
+
+  public static final String ROW_LEVEL_OPS_ISOLATION_LEVEL = "row-level-ops.isolation-level";
+  public static final String ROW_LEVEL_OPS_ISOLATION_LEVEL_DEFAULT = "serializable";
+
+  public static final String ROW_LEVEL_OPS_MODE = "row-level-ops.mode";
+  public static final String ROW_LEVEL_OPS_MODE_DEFAULT = "copy-on-write";
+
+  public static final String COPY_ON_WRITE_READ_FILES_MAX = "row-level-ops.copy-on-write.read-files-max";
+  public static final int COPY_ON_WRITE_READ_FILES_MAX_DEFAULT = 5000;
+
+  public static final String COPY_ON_WRITE_OVERWRITE_FILES_MAX = "row-level-ops.copy-on-write.overwrite-files-max";
+  public static final int COPY_ON_WRITE_OVERWRITE_FILES_MAX_DEFAULT = 1000;
 }

@@ -25,6 +25,8 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
@@ -33,19 +35,25 @@ import org.apache.iceberg.spark.SparkFilters;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
+import org.apache.spark.sql.connector.catalog.SupportsMetadataOnlyDeletes;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
+import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.RowLevelOperationsBuilder;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import static org.apache.iceberg.TableProperties.ROW_LEVEL_OPS_MODE;
+import static org.apache.iceberg.TableProperties.ROW_LEVEL_OPS_MODE_DEFAULT;
+
 public class SparkTable implements org.apache.spark.sql.connector.catalog.Table,
-    SupportsRead, SupportsWrite, SupportsDelete {
+    SupportsRead, SupportsWrite, SupportsMetadataOnlyDeletes, SupportsRowLevelOperations {
 
   private static final Set<String> RESERVED_PROPERTIES = Sets.newHashSet("provider", "format", "current-snapshot-id");
   private static final Set<TableCapability> CAPABILITIES = ImmutableSet.of(
@@ -153,6 +161,24 @@ public class SparkTable implements org.apache.spark.sql.connector.catalog.Table,
   @Override
   public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
     return new SparkWriteBuilder(sparkSession(), icebergTable, info);
+  }
+
+  @Override
+  public RowLevelOperationsBuilder newRowLevelOperationsBuilder(LogicalWriteInfo info) {
+    String mode = icebergTable.properties().getOrDefault(ROW_LEVEL_OPS_MODE, ROW_LEVEL_OPS_MODE_DEFAULT);
+    ValidationException.check(mode.equals("copy-on-write"), "Unsupported row operations mode: %s", mode);
+    return new SparkCopyOnWriteOperationsBuilder(sparkSession(), icebergTable, info);
+  }
+
+  @Override
+  public boolean canDeleteUsingMetadataWhere(Filter[] filters) {
+    for (Filter filter : filters) {
+      Expression converted = SparkFilters.convert(filter);
+      if (converted == null) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override
