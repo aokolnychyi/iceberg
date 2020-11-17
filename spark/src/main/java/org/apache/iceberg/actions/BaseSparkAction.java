@@ -22,16 +22,14 @@ package org.apache.iceberg.actions;
 import java.util.Iterator;
 import java.util.List;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.MetadataTableType;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StaticTableOperations;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.io.ClosingIterator;
 import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.SparkUtil;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -41,114 +39,110 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
-abstract class BaseSparkAction<R> implements Action<R> {
+import static org.apache.iceberg.MetadataTableType.ALL_MANIFESTS;
 
-  protected abstract Table table();
+abstract class BaseSparkAction<R> extends BaseAction<R> {
 
-  /**
-   * Returns all the path locations of all Manifest Lists for a given list of snapshots
-   * @param snapshots snapshots
-   * @return the paths of the Manifest Lists
-   */
-  private List<String> getManifestListPaths(Iterable<Snapshot> snapshots) {
-    List<String> manifestLists = Lists.newArrayList();
-    for (Snapshot snapshot : snapshots) {
-      String manifestListLocation = snapshot.manifestListLocation();
-      if (manifestListLocation != null) {
-        manifestLists.add(manifestListLocation);
-      }
-    }
-    return manifestLists;
+  private final SparkSession spark;
+  private final JavaSparkContext sparkContext;
+  private final boolean isSpark2;
+  private final Table table;
+  private final TableOperations ops;
+
+  public BaseSparkAction(SparkSession spark, Table table) {
+    this.spark = spark;
+    this.sparkContext = new JavaSparkContext(spark.sparkContext());
+    this.isSpark2 = sparkContext.version().startsWith("2");
+    this.table = table;
+    this.ops = ((HasTableOperations) table).operations();
   }
 
-  /**
-   * Returns all Metadata file paths which may not be in the current metadata. Specifically
-   * this includes "version-hint" files as well as entries in metadata.previousFiles.
-   * @param ops TableOperations for the table we will be getting paths from
-   * @return a list of paths to metadata files
-   */
-  private List<String> getOtherMetadataFilePaths(TableOperations ops) {
-    List<String> otherMetadataFiles = Lists.newArrayList();
-    otherMetadataFiles.add(ops.metadataFileLocation("version-hint.text"));
-
-    TableMetadata metadata = ops.current();
-    otherMetadataFiles.add(metadata.metadataFileLocation());
-    for (TableMetadata.MetadataLogEntry previousMetadataFile : metadata.previousFiles()) {
-      otherMetadataFiles.add(previousMetadataFile.file());
-    }
-    return otherMetadataFiles;
+  protected SparkSession spark() {
+    return spark;
   }
 
-  protected Dataset<Row> buildValidDataFileDF(SparkSession spark) {
-    return buildValidDataFileDF(spark, table().name());
+  protected JavaSparkContext sparkContext() {
+    return sparkContext;
   }
 
-  protected Dataset<Row> buildValidDataFileDF(SparkSession spark, String tableName) {
-    JavaSparkContext context = new JavaSparkContext(spark.sparkContext());
-    Broadcast<FileIO> ioBroadcast = context.broadcast(SparkUtil.serializableFileIO(table()));
+  @Override
+  protected Table table() {
+    return table;
+  }
 
-    Dataset<ManifestFileBean> allManifests = loadMetadataTable(spark, tableName, table().location(),
-        MetadataTableType.ALL_MANIFESTS)
+  protected TableOperations ops() {
+    return ops;
+  }
+
+  protected Dataset<Row> buildValidDataFileDF() {
+    return buildValidDataFileDF(table.name());
+  }
+
+  protected Dataset<Row> buildValidDataFileDF(String tableName) {
+    Broadcast<FileIO> io = sparkContext.broadcast(SparkUtil.serializableFileIO(table()));
+
+    Dataset<ManifestFileBean> allManifests = loadMetadataTable(tableName, ALL_MANIFESTS)
         .selectExpr("path", "length", "partition_spec_id as partitionSpecId", "added_snapshot_id as addedSnapshotId")
         .dropDuplicates("path")
         .repartition(spark.sessionState().conf().numShufflePartitions()) // avoid adaptive execution combining tasks
         .as(Encoders.bean(ManifestFileBean.class));
 
-    return allManifests.flatMap(new ReadManifest(ioBroadcast), Encoders.STRING()).toDF("file_path");
+    return allManifests.flatMap(new ReadManifest(io), Encoders.STRING()).toDF("file_path");
   }
 
-  protected Dataset<Row> buildManifestFileDF(SparkSession spark, String tableName) {
-    return loadMetadataTable(spark, tableName, table().location(), MetadataTableType.ALL_MANIFESTS)
-        .selectExpr("path as file_path");
+  protected Dataset<Row> buildManifestFileDF() {
+    return buildManifestFileDF(table.name());
   }
 
-  protected Dataset<Row> buildManifestListDF(SparkSession spark, Table table) {
+  protected Dataset<Row> buildManifestFileDF(String tableName) {
+    return loadMetadataTable(tableName, ALL_MANIFESTS).selectExpr("path as file_path");
+  }
+
+  protected Dataset<Row> buildManifestListDF() {
     List<String> manifestLists = getManifestListPaths(table.snapshots());
     return spark.createDataset(manifestLists, Encoders.STRING()).toDF("file_path");
   }
 
-  protected Dataset<Row> buildManifestListDF(SparkSession spark, String metadataFileLocation) {
-    StaticTableOperations ops = new StaticTableOperations(metadataFileLocation, table().io());
-    return buildManifestListDF(spark, new BaseTable(ops, table().name()));
+  protected Dataset<Row> buildManifestListDF(String metadataFileLocation) {
+    StaticTableOperations ops = new StaticTableOperations(metadataFileLocation, table.io());
+    BaseTable staticTable = new BaseTable(ops, table.name());
+    List<String> manifestLists = getManifestListPaths(staticTable.snapshots());
+    return spark.createDataset(manifestLists, Encoders.STRING()).toDF("file_path");
   }
 
-  protected Dataset<Row> buildOtherMetadataFileDF(SparkSession spark, TableOperations ops) {
+  protected Dataset<Row> buildOtherMetadataFileDF() {
     List<String> otherMetadataFiles = getOtherMetadataFilePaths(ops);
     return spark.createDataset(otherMetadataFiles, Encoders.STRING()).toDF("file_path");
   }
 
-  protected Dataset<Row> buildValidMetadataFileDF(SparkSession spark, Table table, TableOperations ops) {
-    Dataset<Row> manifestDF = buildManifestFileDF(spark, table.name());
-    Dataset<Row> manifestListDF = buildManifestListDF(spark, table);
-    Dataset<Row> otherMetadataFileDF = buildOtherMetadataFileDF(spark, ops);
+  protected Dataset<Row> buildValidMetadataFileDF() {
+    Dataset<Row> manifestDF = buildManifestFileDF();
+    Dataset<Row> manifestListDF = buildManifestListDF();
+    Dataset<Row> otherMetadataFileDF = buildOtherMetadataFileDF();
 
     return manifestDF.union(otherMetadataFileDF).union(manifestListDF);
   }
 
-  protected static Dataset<Row> loadMetadataTable(SparkSession spark, String tableName, String tableLocation,
-                                                  MetadataTableType type) {
-    String metadataTableName = metadataTableName(tableName, tableLocation, type);
-    if (!metadataTableName.contains("/") && metadataTableName.split("\\.").length > 3) {
-      // This table has a three or more components and is not a file (catalog.db.table.meta), use the V2 read path
-      return spark.table(metadataTableName);
-    } else {
-      // This table is file based or has no catalog (db.tableName.meta) or (/some/path#meta), read via non-catalog path
-      return spark.read().format("iceberg").load(metadataTableName);
-    }
-  }
-
-  private static String metadataTableName(String tableName, String tableLocation, MetadataTableType type) {
+  // TODO: spark_catalog will fail?
+  // TODO: try BaseSpark2Action and BaseSpark3Action instead?
+  protected Dataset<Row> loadMetadataTable(String tableName, MetadataTableType type) {
     if (tableName.contains("/")) {
-      return tableName + "#" + type;
-    } else if (tableName.startsWith("hadoop.")) {
-      // for HadoopCatalog tables, use the table location to load the metadata table
+      // use the DataFrame API for path-based tables in Spark 2 and 3
+      String metadataTableName = tableName + "#" + type;
+      return spark.read().format("iceberg").load(metadataTableName);
+    } else if (isSpark2 && tableName.startsWith("hadoop.")) {
+      // for HadoopCatalog tables in Spark 2, use the table location to load the metadata table
       // because IcebergCatalog uses HiveCatalog when the table is identified by name
-      return tableLocation + "#" + type;
-    } else if (tableName.startsWith("hive.")) {
-      // HiveCatalog prepend a logical name which we need to drop for Spark 2.4
-      return tableName.replaceFirst("hive\\.", "") + "." + type;
+      String metadataTableName = table.location() + "#" + type;
+      return spark.read().format("iceberg").load(metadataTableName);
+    } else if (isSpark2 && tableName.startsWith("hive.")) {
+      // HiveCatalog prepends a logical name which we need to drop for Spark 2.4
+      String metadataTableName = tableName.replaceFirst("hive\\.", "") + "." + type;
+      return spark.read().format("iceberg").load(metadataTableName);
     } else {
-      return tableName + "." + type;
+      // use catalog-based resolution in all other cases
+      String metadataTableName = tableName + "." + type;
+      return spark.table(metadataTableName);
     }
   }
 

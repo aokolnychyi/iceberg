@@ -79,35 +79,23 @@ public class RemoveOrphanFilesAction extends BaseSparkAction<List<String>> {
     }
   }, DataTypes.StringType);
 
-  private final SparkSession spark;
-  private final JavaSparkContext sparkContext;
   private final SerializableConfiguration hadoopConf;
   private final int partitionDiscoveryParallelism;
-  private final Table table;
-  private final TableOperations ops;
 
   private String location = null;
   private long olderThanTimestamp = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(3);
   private Consumer<String> deleteFunc = new Consumer<String>() {
     @Override
     public void accept(String file) {
-      table.io().deleteFile(file);
+      table().io().deleteFile(file);
     }
   };
 
   RemoveOrphanFilesAction(SparkSession spark, Table table) {
-    this.spark = spark;
-    this.sparkContext = new JavaSparkContext(spark.sparkContext());
+    super(spark, table);
     this.hadoopConf = new SerializableConfiguration(spark.sessionState().newHadoopConf());
     this.partitionDiscoveryParallelism = spark.sessionState().conf().parallelPartitionDiscoveryParallelism();
-    this.table = table;
-    this.ops = ((HasTableOperations) table).operations();
     this.location = table.location();
-  }
-
-  @Override
-  protected Table table() {
-    return table;
   }
 
   /**
@@ -145,8 +133,8 @@ public class RemoveOrphanFilesAction extends BaseSparkAction<List<String>> {
 
   @Override
   public List<String> execute() {
-    Dataset<Row> validDataFileDF = buildValidDataFileDF(spark);
-    Dataset<Row> validMetadataFileDF = buildValidMetadataFileDF(spark, table, ops);
+    Dataset<Row> validDataFileDF = buildValidDataFileDF();
+    Dataset<Row> validMetadataFileDF = buildValidMetadataFileDF();
     Dataset<Row> validFileDF = validDataFileDF.union(validMetadataFileDF);
     Dataset<Row> actualFileDF = buildActualFileDF();
 
@@ -176,20 +164,20 @@ public class RemoveOrphanFilesAction extends BaseSparkAction<List<String>> {
     // list at most 3 levels and only dirs that have less than 10 direct sub dirs on the driver
     listDirRecursively(location, predicate, hadoopConf.value(), 3, 10, subDirs, matchingFiles);
 
-    JavaRDD<String> matchingFileRDD = sparkContext.parallelize(matchingFiles, 1);
+    JavaRDD<String> matchingFileRDD = sparkContext().parallelize(matchingFiles, 1);
 
     if (subDirs.isEmpty()) {
-      return spark.createDataset(matchingFileRDD.rdd(), Encoders.STRING()).toDF("file_path");
+      return spark().createDataset(matchingFileRDD.rdd(), Encoders.STRING()).toDF("file_path");
     }
 
     int parallelism = Math.min(subDirs.size(), partitionDiscoveryParallelism);
-    JavaRDD<String> subDirRDD = sparkContext.parallelize(subDirs, parallelism);
+    JavaRDD<String> subDirRDD = sparkContext().parallelize(subDirs, parallelism);
 
-    Broadcast<SerializableConfiguration> conf = sparkContext.broadcast(hadoopConf);
+    Broadcast<SerializableConfiguration> conf = sparkContext().broadcast(hadoopConf);
     JavaRDD<String> matchingLeafFileRDD = subDirRDD.mapPartitions(listDirsRecursively(conf, olderThanTimestamp));
 
     JavaRDD<String> completeMatchingFileRDD = matchingFileRDD.union(matchingLeafFileRDD);
-    return spark.createDataset(completeMatchingFileRDD.rdd(), Encoders.STRING()).toDF("file_path");
+    return spark().createDataset(completeMatchingFileRDD.rdd(), Encoders.STRING()).toDF("file_path");
   }
 
   private static void listDirRecursively(

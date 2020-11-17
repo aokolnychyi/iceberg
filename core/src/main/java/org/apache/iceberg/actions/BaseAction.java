@@ -20,35 +20,16 @@
 package org.apache.iceberg.actions;
 
 import java.util.List;
-import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 
+// TODO: replace this action with ActionUtil or something
 abstract class BaseAction<R> implements Action<R> {
 
   protected abstract Table table();
-
-  protected String metadataTableName(MetadataTableType type) {
-    return metadataTableName(table().name(), type);
-  }
-
-  protected String metadataTableName(String tableName, MetadataTableType type) {
-    if (tableName.contains("/")) {
-      return tableName + "#" + type;
-    } else if (tableName.startsWith("hadoop.")) {
-      // for HadoopCatalog tables, use the table location to load the metadata table
-      // because IcebergCatalog uses HiveCatalog when the table is identified by name
-      return table().location() + "#" + type;
-    } else if (tableName.startsWith("hive.")) {
-      // HiveCatalog prepend a logical name which we need to drop for Spark 2.4
-      return tableName.replaceFirst("hive\\.", "") + "." + type;
-    } else {
-      return tableName + "." + type;
-    }
-  }
 
   /**
    * Returns all the path locations of all Manifest Lists for a given list of snapshots

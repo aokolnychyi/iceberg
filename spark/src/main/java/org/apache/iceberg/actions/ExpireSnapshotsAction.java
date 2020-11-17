@@ -63,13 +63,10 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   // Creates an executor service that runs each task in the thread that invokes execute/submit.
   private static final ExecutorService DEFAULT_DELETE_EXECUTOR_SERVICE = null;
 
-  private final SparkSession spark;
-  private final Table table;
-  private final TableOperations ops;
   private final Consumer<String> defaultDelete = new Consumer<String>() {
     @Override
     public void accept(String file) {
-      ops.io().deleteFile(file);
+      table().io().deleteFile(file);
     }
   };
 
@@ -82,14 +79,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   private boolean streamResults = false;
 
   ExpireSnapshotsAction(SparkSession spark, Table table) {
-    this.spark = spark;
-    this.table = table;
-    this.ops = ((HasTableOperations) table).operations();
-  }
-
-  @Override
-  protected Table table() {
-    return table;
+    super(spark, table);
   }
 
   /**
@@ -173,10 +163,10 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   public Dataset<Row> expire() {
     if (expiredFiles == null) {
       // Metadata before Expiration
-      Dataset<Row> originalFiles = buildValidFileDF(ops.current());
+      Dataset<Row> originalFiles = buildValidFileDF(ops().current());
 
       // Perform Expiration
-      ExpireSnapshots expireSnaps = table.expireSnapshots().cleanExpiredFiles(false);
+      ExpireSnapshots expireSnaps = table().expireSnapshots().cleanExpiredFiles(false);
       for (final Long id : expireSnapshotIdValues) {
         expireSnaps = expireSnaps.expireSnapshotId(id);
       }
@@ -192,7 +182,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
       expireSnaps.commit();
 
       // Metadata after Expiration
-      Dataset<Row> validFiles = buildValidFileDF(ops.refresh());
+      Dataset<Row> validFiles = buildValidFileDF(ops().refresh());
 
       this.expiredFiles = originalFiles.except(validFiles);
     }
@@ -214,9 +204,9 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   }
 
   private Dataset<Row> buildValidFileDF(TableMetadata metadata) {
-    return appendTypeString(buildValidDataFileDF(spark, metadata.metadataFileLocation()), DATA_FILE)
-        .union(appendTypeString(buildManifestFileDF(spark, metadata.metadataFileLocation()), MANIFEST))
-        .union(appendTypeString(buildManifestListDF(spark, metadata.metadataFileLocation()), MANIFEST_LIST));
+    return appendTypeString(buildValidDataFileDF(metadata.metadataFileLocation()), DATA_FILE)
+        .union(appendTypeString(buildManifestFileDF(metadata.metadataFileLocation()), MANIFEST))
+        .union(appendTypeString(buildManifestListDF(metadata.metadataFileLocation()), MANIFEST_LIST));
   }
 
   /**

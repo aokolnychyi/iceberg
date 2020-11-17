@@ -82,6 +82,7 @@ public class RewriteManifestsAction
 
   private final SparkSession spark;
   private final JavaSparkContext sparkContext;
+  private final boolean isSpark2;
   private final Encoder<ManifestFile> manifestEncoder;
   private final Table table;
   private final int formatVersion;
@@ -96,6 +97,7 @@ public class RewriteManifestsAction
   RewriteManifestsAction(SparkSession spark, Table table) {
     this.spark = spark;
     this.sparkContext = new JavaSparkContext(spark.sparkContext());
+    this.isSpark2 = sparkContext.version().startsWith("2");
     this.manifestEncoder = Encoders.javaSerialization(ManifestFile.class);
     this.table = table;
     this.spec = table.spec();
@@ -202,8 +204,7 @@ public class RewriteManifestsAction
         .createDataset(Lists.transform(manifests, ManifestFile::path), Encoders.STRING())
         .toDF("manifest");
 
-    Dataset<Row> manifestEntryDF = BaseSparkAction.loadMetadataTable(spark, table.name(), table().location(),
-        MetadataTableType.ENTRIES)
+    Dataset<Row> manifestEntryDF = loadMetadataTable(table.name(), MetadataTableType.ENTRIES)
         .filter("status < 2") // select only live entries
         .selectExpr("input_file_name() as manifest", "snapshot_id", "sequence_number", "data_file");
 
@@ -377,5 +378,27 @@ public class RewriteManifestsAction
 
       return manifests.iterator();
     };
+  }
+
+  // TODO: keep it as copy until we fix the hierarchy
+  protected Dataset<Row> loadMetadataTable(String tableName, MetadataTableType type) {
+    if (tableName.contains("/")) {
+      // use the DataFrame API for path-based tables in Spark 2 and 3
+      String metadataTableName = table.location() + "#" + type;
+      return spark.read().format("iceberg").load(metadataTableName);
+    } else if (isSpark2 && tableName.startsWith("hadoop.")) {
+      // for HadoopCatalog tables in Spark 2, use the table location to load the metadata table
+      // because IcebergCatalog uses HiveCatalog when the table is identified by name
+      String metadataTableName = table.location() + "#" + type;
+      return spark.read().format("iceberg").load(metadataTableName);
+    } else if (isSpark2 && tableName.startsWith("hive.")) {
+      // HiveCatalog prepends a logical name which we need to drop for Spark 2.4
+      String metadataTableName = tableName.replaceFirst("hive\\.", "") + "." + type;
+      return spark.read().format("iceberg").load(metadataTableName);
+    } else {
+      // use catalog-based resolution in all other cases
+      String metadataTableName = tableName + "." + type;
+      return spark.table(metadataTableName);
+    }
   }
 }

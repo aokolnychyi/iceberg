@@ -59,6 +59,4 @@ public class TestRemoveOrphanFilesAction3 extends TestRemoveOrphanFilesAction {
     Assert.assertTrue("trash file should be removed",
         results.contains("file:" + location + "/data/trashfile"));
   }
-
-
 }
