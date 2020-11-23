@@ -26,7 +26,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -286,6 +285,7 @@ public abstract class TestDataSourceOptions {
     Assert.assertEquals("Records should match", expectedRecords.subList(2, 3), result1);
   }
 
+  /*
   @Test
   public void testMetadataSplitSizeOptionOverrideTableProperties() throws IOException {
     String tableLocation = temp.newFolder("iceberg-table").toString();
@@ -332,6 +332,7 @@ public abstract class TestDataSourceOptions {
         .load(tableLocation + "#entries");
     Assert.assertEquals("Num partitions must match", 1, entriesDf.javaRDD().getNumPartitions());
   }
+   */
 
   @Test
   public void testDefaultMetadataSplitSize() throws IOException {

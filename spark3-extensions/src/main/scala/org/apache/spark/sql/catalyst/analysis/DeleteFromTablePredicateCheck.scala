@@ -33,7 +33,6 @@ object DeleteFromTablePredicateCheck extends (LogicalPlan => Unit) {
         // such conditions are rewritten by Spark as an existential join and currently Spark
         // does not handle correctly NOT IN subqueries nested into other expressions
         failAnalysis("Null-aware predicate sub-queries are not currently supported in DELETE")
-
       case _ => // OK
     }
   }
