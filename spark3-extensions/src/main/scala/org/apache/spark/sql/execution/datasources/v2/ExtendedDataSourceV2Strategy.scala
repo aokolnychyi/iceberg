@@ -20,7 +20,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
-import org.apache.spark.sql.catalyst.plans.logical.{CallStatement, DynamicFileFilter, LogicalPlan, ReplaceData}
+import org.apache.spark.sql.catalyst.plans.logical.{CallStatement, DynamicFileFilter, LogicalPlan, MergeInto, MergeIntoTable, ReplaceData}
 import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 
 object ExtendedDataSourceV2Strategy extends Strategy {
@@ -38,6 +38,8 @@ object ExtendedDataSourceV2Strategy extends Strategy {
         // add a projection to ensure we have UnsafeRows required by some operations
         ProjectExec(scanRelation.output, dynamicFileFilter) :: Nil
       }
+    case MergeInto(mergeIntoProcessor, targetRelation, child) =>
+        MergeIntoExec(mergeIntoProcessor, targetRelation, planLater(child)) :: Nil
     case ReplaceData(_, batchWrite, query) =>
       ReplaceDataExec(batchWrite, planLater(query)) :: Nil
     case _ => Nil

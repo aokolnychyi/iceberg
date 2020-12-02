@@ -22,7 +22,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import collection.JavaConverters._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.read.SupportsFileFilter
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
@@ -35,6 +35,8 @@ case class DynamicFileFilterExec(scanExec: ExtendedBatchScanExec, fileFilterExec
   override def output: Seq[Attribute] = scanExec.output
   override def outputPartitioning: physical.Partitioning = scanExec.outputPartitioning
   override def supportsColumnar: Boolean = scanExec.supportsColumnar
+  @transient
+  override lazy val references = AttributeSet(fileFilterExec.output)
 
   override protected def doExecute(): RDD[InternalRow] = scanExec.execute()
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = scanExec.executeColumnar()

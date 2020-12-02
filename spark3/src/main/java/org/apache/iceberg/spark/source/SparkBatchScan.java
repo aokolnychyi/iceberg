@@ -257,9 +257,12 @@ class SparkBatchScan implements Scan, Batch, SupportsFileFilter, SupportsReportS
     }
 
     SparkBatchScan that = (SparkBatchScan) o;
+    String srcFilterExprString = filterExpressions == null ? "null" : filterExpressions.toString();
+    String targetFilterExprString = that.filterExpressions == null ? "null" : that.filterExpressions.toString();
+
     return table.name().equals(that.table.name()) &&
         readSchema().equals(that.readSchema()) && // compare Spark schemas to ignore field ids
-        filterExpressions.toString().equals(that.filterExpressions.toString()) &&
+        srcFilterExprString.equals(targetFilterExprString) &&
         ignoreResiduals == that.ignoreResiduals &&
         Objects.equals(snapshotId, that.snapshotId) &&
         Objects.equals(startSnapshotId, that.startSnapshotId) &&
@@ -269,8 +272,9 @@ class SparkBatchScan implements Scan, Batch, SupportsFileFilter, SupportsReportS
 
   @Override
   public int hashCode() {
+    String filterString = filterExpressions == null ? "null" : filterExpressions.toString();
     return Objects.hash(
-        table.name(), readSchema(), filterExpressions.toString(), ignoreResiduals,
+        table.name(), readSchema(), filterString, ignoreResiduals,
         snapshotId, startSnapshotId, endSnapshotId, asOfTimestamp);
   }
 
@@ -356,8 +360,12 @@ class SparkBatchScan implements Scan, Batch, SupportsFileFilter, SupportsReportS
 
   @Override
   public String description() {
-    String filters = filterExpressions.stream().map(Spark3Util::describe).collect(Collectors.joining(", "));
-    return String.format("%s [filters=%s]", table, filters);
+    if (filterExpressions == null) {
+      return String.format("%s [filters=null]", table);
+    } else {
+      String filters = filterExpressions.stream().map(Spark3Util::describe).collect(Collectors.joining(", "));
+      return String.format("%s [filters=%s]", table, filters);
+    }
   }
 
   @Override
