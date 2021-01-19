@@ -19,6 +19,22 @@
 
 package org.apache.iceberg.actions;
 
+import org.apache.iceberg.Snapshot;
+
+/**
+ * An action that produces snapshots. This interface contains common methods for all
+ * actions that create a new table {@link Snapshot}.
+ *
+ * @param <ThisT> the child Java API class, returned by method chaining
+ * @param <R> the Java type of the result produced by this action
+ */
 public interface SnapshotUpdateAction<ThisT, R> extends Action<R> {
+  /**
+   * Set a summary property in the snapshot produced by this action.
+   *
+   * @param property a String property name
+   * @param value a String property value
+   * @return this for method chaining
+   */
   ThisT set(String property, String value);
 }

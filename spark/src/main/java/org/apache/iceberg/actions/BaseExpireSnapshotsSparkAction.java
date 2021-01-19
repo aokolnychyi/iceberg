@@ -58,8 +58,9 @@ import static org.apache.iceberg.TableProperties.GC_ENABLED_DEFAULT;
  * are issued. Deletes are still performed locally after retrieving the results from the Spark executors.
  */
 @SuppressWarnings("UnnecessaryAnonymousClass")
-public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsActionResult> {
-  private static final Logger LOG = LoggerFactory.getLogger(ExpireSnapshotsAction.class);
+public class BaseExpireSnapshotsSparkAction
+    extends BaseSparkAction<ExpireSnapshotsAction.Result> implements ExpireSnapshotsAction {
+  private static final Logger LOG = LoggerFactory.getLogger(BaseExpireSnapshotsSparkAction.class);
 
   private static final String DATA_FILE = "Data File";
   private static final String MANIFEST = "Manifest";
@@ -68,7 +69,6 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   // Creates an executor service that runs each task in the thread that invokes execute/submit.
   private static final ExecutorService DEFAULT_DELETE_EXECUTOR_SERVICE = null;
 
-  private final SparkSession spark;
   private final Table table;
   private final TableOperations ops;
   private final Consumer<String> defaultDelete = new Consumer<String>() {
@@ -86,19 +86,14 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   private Dataset<Row> expiredFiles = null;
   private boolean streamResults = false;
 
-  ExpireSnapshotsAction(SparkSession spark, Table table) {
-    this.spark = spark;
+  BaseExpireSnapshotsSparkAction(SparkSession spark, Table table) {
+    super(spark);
     this.table = table;
     this.ops = ((HasTableOperations) table).operations();
 
     ValidationException.check(
         PropertyUtil.propertyAsBoolean(table.properties(), GC_ENABLED, GC_ENABLED_DEFAULT),
         "Cannot expire snapshots: GC is disabled (deleting files may corrupt other tables)");
-  }
-
-  @Override
-  protected Table table() {
-    return table;
   }
 
   /**
@@ -108,7 +103,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param stream whether to use toLocalIterator to stream results instead of collect.
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction streamDeleteResults(boolean stream) {
+  public BaseExpireSnapshotsSparkAction streamDeleteResults(boolean stream) {
     this.streamResults = stream;
     return this;
   }
@@ -119,7 +114,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param executorService the service to use
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction executeDeleteWith(ExecutorService executorService) {
+  public BaseExpireSnapshotsSparkAction executeDeleteWith(ExecutorService executorService) {
     this.deleteExecutorService = executorService;
     return this;
   }
@@ -130,7 +125,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param expireSnapshotId Id of the snapshot to expire
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction expireSnapshotId(long expireSnapshotId) {
+  public BaseExpireSnapshotsSparkAction expireSnapshotId(long expireSnapshotId) {
     this.expireSnapshotIdValues.add(expireSnapshotId);
     return this;
   }
@@ -141,7 +136,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param timestampMillis all snapshots before this time will be expired
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction expireOlderThan(long timestampMillis) {
+  public BaseExpireSnapshotsSparkAction expireOlderThan(long timestampMillis) {
     this.expireOlderThanValue = timestampMillis;
     return this;
   }
@@ -152,7 +147,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param numSnapshots number of snapshots to leave
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction retainLast(int numSnapshots) {
+  public BaseExpireSnapshotsSparkAction retainLast(int numSnapshots) {
     Preconditions.checkArgument(1 <= numSnapshots,
         "Number of snapshots to retain must be at least 1, cannot be: %s", numSnapshots);
     this.retainLastValue = numSnapshots;
@@ -165,7 +160,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param newDeleteFunc Consumer which takes a path and deletes it
    * @return this for method chaining
    */
-  public ExpireSnapshotsAction deleteWith(Consumer<String> newDeleteFunc) {
+  public BaseExpireSnapshotsSparkAction deleteWith(Consumer<String> newDeleteFunc) {
     this.deleteFunc = newDeleteFunc;
     return this;
   }
@@ -210,7 +205,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   }
 
   @Override
-  public ExpireSnapshotsActionResult execute() {
+  public ExpireSnapshotsAction.Result execute() {
     if (streamResults) {
       return deleteFiles(expire().toLocalIterator());
     } else {
@@ -223,9 +218,10 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
   }
 
   private Dataset<Row> buildValidFileDF(TableMetadata metadata) {
-    return appendTypeString(buildValidDataFileDF(spark, metadata.metadataFileLocation()), DATA_FILE)
-        .union(appendTypeString(buildManifestFileDF(spark, metadata.metadataFileLocation()), MANIFEST))
-        .union(appendTypeString(buildManifestListDF(spark, metadata.metadataFileLocation()), MANIFEST_LIST));
+    Table staticTable = newStaticTable(metadata, this.table.io());
+    return appendTypeString(buildValidDataFileDF(staticTable), DATA_FILE)
+        .union(appendTypeString(buildManifestFileDF(staticTable), MANIFEST))
+        .union(appendTypeString(buildManifestListDF(staticTable), MANIFEST_LIST));
   }
 
   /**
@@ -233,7 +229,7 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
    * @param expired an Iterator of Spark Rows of the structure (path: String, type: String)
    * @return Statistics on which files were deleted
    */
-  private ExpireSnapshotsActionResult deleteFiles(Iterator<Row> expired) {
+  private BaseExpireSnapshotsActionResult deleteFiles(Iterator<Row> expired) {
     AtomicLong dataFileCount = new AtomicLong(0L);
     AtomicLong manifestCount = new AtomicLong(0L);
     AtomicLong manifestListCount = new AtomicLong(0L);
@@ -263,6 +259,6 @@ public class ExpireSnapshotsAction extends BaseSparkAction<ExpireSnapshotsAction
           }
         });
     LOG.info("Deleted {} total files", dataFileCount.get() + manifestCount.get() + manifestListCount.get());
-    return new ExpireSnapshotsActionResult(dataFileCount.get(), manifestCount.get(), manifestListCount.get());
+    return new BaseExpireSnapshotsActionResult(dataFileCount.get(), manifestCount.get(), manifestListCount.get());
   }
 }

@@ -1004,7 +1004,7 @@ public abstract class TestExpireSnapshotsAction extends SparkTestBase {
 
     Set<String> deletedFiles = Sets.newHashSet();
 
-    ExpireSnapshotsAction action = Actions.forTable(table).expireSnapshots()
+    BaseExpireSnapshotsSparkAction action = Actions.forTable(table).expireSnapshots()
         .expireOlderThan(tAfterCommits)
         .deleteWith(deletedFiles::add);
     Dataset<Row> pendingDeletes = action.expire();

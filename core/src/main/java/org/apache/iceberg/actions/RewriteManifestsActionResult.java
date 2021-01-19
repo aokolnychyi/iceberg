@@ -19,28 +19,33 @@
 //
 //package org.apache.iceberg.actions;
 //
-//public class ExpireSnapshotsActionResult {
+//import java.util.List;
+//import org.apache.iceberg.ManifestFile;
+//import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 //
-//  private final Long dataFilesDeleted;
-//  private final Long manifestFilesDeleted;
-//  private final Long manifestListsDeleted;
+//public class RewriteManifestsActionResult {
 //
-//  public ExpireSnapshotsActionResult(Long dataFilesDeleted, Long manifestFilesDeleted, Long manifestListsDeleted) {
-//    this.dataFilesDeleted = dataFilesDeleted;
-//    this.manifestFilesDeleted = manifestFilesDeleted;
-//    this.manifestListsDeleted = manifestListsDeleted;
+//  private static final RewriteManifestsActionResult EMPTY = new RewriteManifestsActionResult(
+//      ImmutableList.of(), ImmutableList.of()
+//  );
+//
+//  private final List<ManifestFile> deletedManifests;
+//  private final List<ManifestFile> addedManifests;
+//
+//  public RewriteManifestsActionResult(List<ManifestFile> deletedManifests, List<ManifestFile> addedManifests) {
+//    this.deletedManifests = deletedManifests;
+//    this.addedManifests = addedManifests;
 //  }
 //
-//  public Long dataFilesDeleted() {
-//    return dataFilesDeleted;
+//  static RewriteManifestsActionResult empty() {
+//    return EMPTY;
 //  }
 //
-//  public Long manifestFilesDeleted() {
-//    return manifestFilesDeleted;
+//  public List<ManifestFile> deletedManifests() {
+//    return deletedManifests;
 //  }
 //
-//  public Long manifestListsDeleted() {
-//    return manifestListsDeleted;
+//  public List<ManifestFile> addedManifests() {
+//    return addedManifests;
 //  }
-//
 //}

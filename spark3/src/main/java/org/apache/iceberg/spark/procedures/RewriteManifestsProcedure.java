@@ -20,7 +20,7 @@
 package org.apache.iceberg.spark.procedures;
 
 import org.apache.iceberg.actions.Actions;
-import org.apache.iceberg.actions.RewriteManifestsAction;
+import org.apache.iceberg.actions.BaseRewriteManifestsSparkAction;
 import org.apache.iceberg.actions.RewriteManifestsActionResult;
 import org.apache.iceberg.spark.procedures.SparkProcedures.ProcedureBuilder;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -83,7 +83,7 @@ class RewriteManifestsProcedure extends BaseProcedure {
     return modifyIcebergTable(tableIdent, table -> {
       Actions actions = Actions.forTable(table);
 
-      RewriteManifestsAction action = actions.rewriteManifests();
+      BaseRewriteManifestsSparkAction action = actions.rewriteManifests();
 
       if (useCaching != null) {
         action.useCaching(useCaching);

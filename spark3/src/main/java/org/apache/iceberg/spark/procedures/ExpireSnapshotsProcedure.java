@@ -20,8 +20,10 @@
 package org.apache.iceberg.spark.procedures;
 
 import org.apache.iceberg.actions.Actions;
+import org.apache.iceberg.actions.BaseExpireSnapshotsSparkAction;
 import org.apache.iceberg.actions.ExpireSnapshotsAction;
 import org.apache.iceberg.actions.ExpireSnapshotsActionResult;
+import org.apache.iceberg.actions.SparkActions;
 import org.apache.iceberg.spark.procedures.SparkProcedures.ProcedureBuilder;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -82,7 +84,7 @@ public class ExpireSnapshotsProcedure extends BaseProcedure {
     Integer retainLastNum = args.isNullAt(2) ? null : args.getInt(2);
 
     return modifyIcebergTable(tableIdent, table -> {
-      Actions actions = Actions.forTable(table);
+      SparkActions actions = SparkActions.forTable(table);
 
       ExpireSnapshotsAction action = actions.expireSnapshots();
 
@@ -94,7 +96,7 @@ public class ExpireSnapshotsProcedure extends BaseProcedure {
         action.retainLast(retainLastNum);
       }
 
-      ExpireSnapshotsActionResult result = action.execute();
+      ExpireSnapshotsAction.Result result = action.execute();
 
       InternalRow outputRow = newInternalRow(
           result.dataFilesDeleted(),

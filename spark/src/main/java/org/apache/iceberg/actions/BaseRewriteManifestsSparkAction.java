@@ -76,13 +76,12 @@ import static org.apache.iceberg.MetadataTableType.ENTRIES;
  * and a custom spec id to {@link #specId(int)}. In addition, there is a way to configure a custom location
  * for new manifests via {@link #stagingLocation}.
  */
-public class RewriteManifestsAction
-    extends BaseSnapshotUpdateAction<RewriteManifestsAction, RewriteManifestsActionResult> {
+public class BaseRewriteManifestsSparkAction
+    extends BaseSnapshotUpdateSparkAction<RewriteManifestsAction, RewriteManifestsAction.Result>
+    implements RewriteManifestsAction {
 
-  private static final Logger LOG = LoggerFactory.getLogger(RewriteManifestsAction.class);
+  private static final Logger LOG = LoggerFactory.getLogger(BaseRewriteManifestsSparkAction.class);
 
-  private final SparkSession spark;
-  private final JavaSparkContext sparkContext;
   private final Encoder<ManifestFile> manifestEncoder;
   private final Table table;
   private final int formatVersion;
@@ -94,9 +93,8 @@ public class RewriteManifestsAction
   private String stagingLocation = null;
   private boolean useCaching = true;
 
-  RewriteManifestsAction(SparkSession spark, Table table) {
-    this.spark = spark;
-    this.sparkContext = new JavaSparkContext(spark.sparkContext());
+  BaseRewriteManifestsSparkAction(SparkSession spark, Table table) {
+    super(spark);
     this.manifestEncoder = Encoders.javaSerialization(ManifestFile.class);
     this.table = table;
     this.spec = table.spec();
@@ -116,16 +114,11 @@ public class RewriteManifestsAction
   }
 
   @Override
-  protected RewriteManifestsAction self() {
+  protected BaseRewriteManifestsSparkAction self() {
     return this;
   }
 
-  @Override
-  protected Table table() {
-    return table;
-  }
-
-  public RewriteManifestsAction specId(int specId) {
+  public BaseRewriteManifestsSparkAction specId(int specId) {
     Preconditions.checkArgument(table.specs().containsKey(specId), "Invalid spec id %d", specId);
     this.spec = table.specs().get(specId);
     return this;
@@ -137,7 +130,7 @@ public class RewriteManifestsAction
    * @param newPredicate a predicate
    * @return this for method chaining
    */
-  public RewriteManifestsAction rewriteIf(Predicate<ManifestFile> newPredicate) {
+  public BaseRewriteManifestsSparkAction rewriteIf(Predicate<ManifestFile> newPredicate) {
     this.predicate = newPredicate;
     return this;
   }
@@ -148,7 +141,7 @@ public class RewriteManifestsAction
    * @param newStagingLocation a staging location
    * @return this for method chaining
    */
-  public RewriteManifestsAction stagingLocation(String newStagingLocation) {
+  public BaseRewriteManifestsSparkAction stagingLocation(String newStagingLocation) {
     this.stagingLocation = newStagingLocation;
     return this;
   }
@@ -159,16 +152,16 @@ public class RewriteManifestsAction
    * @param newUseCaching a flag whether to use caching
    * @return this for method chaining
    */
-  public RewriteManifestsAction useCaching(boolean newUseCaching) {
+  public BaseRewriteManifestsSparkAction useCaching(boolean newUseCaching) {
     this.useCaching = newUseCaching;
     return this;
   }
 
   @Override
-  public RewriteManifestsActionResult execute() {
+  public RewriteManifestsAction.Result execute() {
     List<ManifestFile> matchingManifests = findMatchingManifests();
     if (matchingManifests.isEmpty()) {
-      return RewriteManifestsActionResult.empty();
+      return BaseRewriteManifestsActionResult.empty();
     }
 
     long totalSizeBytes = 0L;
@@ -195,15 +188,15 @@ public class RewriteManifestsAction
 
     replaceManifests(matchingManifests, newManifests);
 
-    return new RewriteManifestsActionResult(matchingManifests, newManifests);
+    return new BaseRewriteManifestsActionResult(matchingManifests, newManifests);
   }
 
   private Dataset<Row> buildManifestEntryDF(List<ManifestFile> manifests) {
-    Dataset<Row> manifestDF = spark
+    Dataset<Row> manifestDF = spark()
         .createDataset(Lists.transform(manifests, ManifestFile::path), Encoders.STRING())
         .toDF("manifest");
 
-    Dataset<Row> manifestEntryDF = BaseSparkAction.loadMetadataTable(spark, table.name(), table().location(), ENTRIES)
+    Dataset<Row> manifestEntryDF = loadMetadataTable(table, ENTRIES)
         .filter("status < 2") // select only live entries
         .selectExpr("input_file_name() as manifest", "snapshot_id", "sequence_number", "data_file");
 
@@ -214,7 +207,7 @@ public class RewriteManifestsAction
   }
 
   private List<ManifestFile> writeManifestsForUnpartitionedTable(Dataset<Row> manifestEntryDF, int numManifests) {
-    Broadcast<FileIO> io = sparkContext.broadcast(fileIO);
+    Broadcast<FileIO> io = sparkContext().broadcast(fileIO);
     StructType sparkType = (StructType) manifestEntryDF.schema().apply("data_file").dataType();
 
     // we rely only on the target number of manifests for unpartitioned tables
@@ -234,7 +227,7 @@ public class RewriteManifestsAction
       Dataset<Row> manifestEntryDF, int numManifests,
       int targetNumManifestEntries) {
 
-    Broadcast<FileIO> io = sparkContext.broadcast(fileIO);
+    Broadcast<FileIO> io = sparkContext().broadcast(fileIO);
     StructType sparkType = (StructType) manifestEntryDF.schema().apply("data_file").dataType();
 
     // we allow the actual size of manifests to be 10% higher if the estimation is not precise enough

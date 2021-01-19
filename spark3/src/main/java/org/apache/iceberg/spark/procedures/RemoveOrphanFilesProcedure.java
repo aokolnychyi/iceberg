@@ -22,7 +22,7 @@ package org.apache.iceberg.spark.procedures;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.apache.iceberg.actions.Actions;
-import org.apache.iceberg.actions.RemoveOrphanFilesAction;
+import org.apache.iceberg.actions.BaseRemoveOrphanFilesSparkAction;
 import org.apache.iceberg.spark.procedures.SparkProcedures.ProcedureBuilder;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -88,7 +88,7 @@ public class RemoveOrphanFilesProcedure extends BaseProcedure {
       SparkSession spark = SparkSession.active();
       Actions actions = Actions.forTable(spark, table);
 
-      RemoveOrphanFilesAction action = actions.removeOrphanFiles();
+      BaseRemoveOrphanFilesSparkAction action = actions.removeOrphanFiles();
 
       if (olderThanMillis != null) {
         boolean isTesting = Boolean.parseBoolean(spark.conf().get("spark.testing", "false"));
