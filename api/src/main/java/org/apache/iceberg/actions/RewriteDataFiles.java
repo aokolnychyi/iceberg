@@ -110,6 +110,14 @@ public interface RewriteDataFiles extends SnapshotUpdate<RewriteDataFiles, Rewri
    */
   interface Result {
     Map<FileGroupInfo, FileGroupRewriteResult> resultMap();
+
+    default int addedDataFilesCount() {
+      return resultMap().values().stream().mapToInt(FileGroupRewriteResult::addedDataFilesCount).sum();
+    }
+
+    default int rewrittenDataFilesCount() {
+      return resultMap().values().stream().mapToInt(FileGroupRewriteResult::rewrittenDataFilesCount).sum();
+    }
   }
 
   /**

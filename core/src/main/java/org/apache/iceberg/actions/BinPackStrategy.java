@@ -42,7 +42,7 @@ import org.apache.iceberg.util.PropertyUtil;
  * by {@link RewriteDataFiles#MAX_FILE_GROUP_SIZE_BYTES}. Groups will be considered for rewriting if they contain
  * more files than {@link MIN_INPUT_FILES} and would produce more files than {@link MIN_OUTPUT_FILES}.
  */
-abstract class BinPackStrategy implements RewriteStrategy {
+public abstract class BinPackStrategy implements RewriteStrategy {
 
   /**
    * Minimum number of files that need to be in a file group to be considered
@@ -179,5 +179,9 @@ abstract class BinPackStrategy implements RewriteStrategy {
     Preconditions.checkArgument(minOutputFiles > 0,
         "Cannot set %s to less than 1. All values less than 1 have the same effect as 1. %d < 1",
         MIN_OUTPUT_FILES, minOutputFiles);
+  }
+
+  protected long targetFileSize() {
+    return this.targetFileSize;
   }
 }
