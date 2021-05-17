@@ -42,7 +42,7 @@ import org.apache.iceberg.util.PropertyUtil;
  * by {@link RewriteDataFiles#MAX_FILE_GROUP_SIZE_BYTES}. Groups will be considered for rewriting if they contain
  * more files than {@link MIN_INPUT_FILES} and would produce more files than {@link MIN_OUTPUT_FILES}.
  */
-public abstract class BinPackStrategy implements RewriteStrategy {
+public class BinPackStrategy implements RewriteStrategy {
 
   /**
    * Minimum number of files that need to be in a file group to be considered

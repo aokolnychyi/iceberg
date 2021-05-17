@@ -19,11 +19,15 @@
 
 package org.apache.iceberg.spark.actions;
 
+import java.util.List;
 import java.util.Set;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.actions.RewriteDataFiles;
 import org.apache.iceberg.actions.RewriteStrategy;
 import org.apache.iceberg.spark.FileRewriteCoordinator;
+import org.apache.iceberg.spark.FileScanTaskSetManager;
 import org.apache.iceberg.spark.actions.rewrite.Spark3BinPackStrategy;
 import org.apache.spark.sql.SparkSession;
 import org.slf4j.Logger;
@@ -38,30 +42,45 @@ public class BaseRewriteDataFilesSpark3Action extends BaseRewriteDataFilesSparkA
   }
 
   @Override
-  protected RewriteStrategy rewriteStrategy(Strategy type) {
-    switch (type) {
-      case BINPACK: return new Spark3BinPackStrategy(table(), spark());
-      default: throw new IllegalArgumentException(String.format(
-          "Cannot create rewrite strategy for %s because %s is not yet supported in Spark3", type, type));
-    }
-  }
-
-  @Override
-  protected void commitFileGroups(Set<String> completedGroupIDs) {
-    coordinator.commitRewrite(table(), completedGroupIDs);
-  }
-
-  @Override
-  protected void abortFileGroup(String groupID) {
-    try {
-      coordinator.abortRewrite(table(), groupID);
-    } catch (Exception e) {
-      LOG.error("Unable to cleanup rewrite file group {} for table {}", groupID, table().name(), e);
-    }
-  }
-
-  @Override
   protected RewriteDataFiles self() {
     return this;
+  }
+
+  @Override
+  protected DataFilesRewriter newRewriter(RewriteStrategy strategy) {
+    // TODO: return a correct rewriter
+    return null;
+  }
+
+  static class Spark3DataFilesBinPacker implements DataFilesRewriter {
+    private final Table table;
+    private final SparkSession spark;
+    private final FileScanTaskSetManager taskSetManager = FileScanTaskSetManager.get();
+    private final FileRewriteCoordinator rewriteCoordinator = FileRewriteCoordinator.get();
+
+    public Spark3DataFilesBinPacker(Table table, SparkSession spark) {
+      this.table = table;
+      this.spark = spark;
+    }
+
+    @Override
+    public Set<DataFile> rewrite(String groupID, List<FileScanTask> fileScanTasks) {
+      // TODO: copy from Spark3BinPackStrategy
+      return null;
+    }
+
+    @Override
+    public void commit(Set<String> groupIDs) {
+      rewriteCoordinator.commitRewrite(table, groupIDs);
+    }
+
+    @Override
+    public void abort(String groupID) {
+      try {
+        rewriteCoordinator.abortRewrite(table, groupID);
+      } catch (Exception e) {
+        LOG.error("Unable to cleanup rewrite file group {} for table {}", groupID, table.name(), e);
+      }
+    }
   }
 }

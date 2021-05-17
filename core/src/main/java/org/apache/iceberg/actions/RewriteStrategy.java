@@ -34,11 +34,6 @@ public interface RewriteStrategy extends Serializable {
   String name();
 
   /**
-   * Returns the table being modified by this rewrite strategy
-   */
-  Table table();
-
-  /**
    * Returns a set of options which this rewrite strategy can use. This is an allowed-list and any options not
    * specified here will be rejected at runtime.
    */
@@ -66,14 +61,4 @@ public interface RewriteStrategy extends Serializable {
    * @return iterable of lists of FileScanTasks which will be processed together
    */
   Iterable<List<FileScanTask>> planFileGroups(Iterable<FileScanTask> dataFiles);
-
-  /**
-   * Method which will rewrite files based on this particular RewriteStrategy's algorithm.
-   * This will most likely be Action framework specific (Spark/Presto/Flink ....).
-   *
-   * @param groupID an identifier for this set of files
-   * @param filesToRewrite a group of files to be rewritten together
-   * @return a list of newly written files
-   */
-  Set<DataFile> rewriteFiles(String groupID, List<FileScanTask> filesToRewrite);
 }
