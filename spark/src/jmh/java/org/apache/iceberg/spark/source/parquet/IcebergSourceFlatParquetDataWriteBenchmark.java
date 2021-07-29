@@ -48,10 +48,14 @@ import static org.apache.spark.sql.functions.expr;
 public class IcebergSourceFlatParquetDataWriteBenchmark extends IcebergSourceFlatDataBenchmark {
 
   private static final int NUM_ROWS = 5000000;
+  private Dataset<Row> data;
 
   @Setup
   public void setupBenchmark() {
     setupSpark();
+    data = benchmarkData();
+    data.cache();
+    data.count();
   }
 
   @TearDown
@@ -64,7 +68,7 @@ public class IcebergSourceFlatParquetDataWriteBenchmark extends IcebergSourceFla
   @Threads(1)
   public void writeIceberg() {
     String tableLocation = table().location();
-    benchmarkData().write().format("iceberg").mode(SaveMode.Append).save(tableLocation);
+    data.write().format("iceberg").mode(SaveMode.Append).save(tableLocation);
   }
 
   @Benchmark
@@ -72,7 +76,7 @@ public class IcebergSourceFlatParquetDataWriteBenchmark extends IcebergSourceFla
   public void writeFileSource() {
     Map<String, String> conf = Maps.newHashMap();
     conf.put(SQLConf.PARQUET_COMPRESSION().key(), "gzip");
-    withSQLConf(conf, () -> benchmarkData().write().mode(SaveMode.Append).parquet(dataLocation()));
+    withSQLConf(conf, () -> data.write().partitionBy("partCol").mode(SaveMode.Append).parquet(dataLocation()));
   }
 
   private Dataset<Row> benchmarkData() {
@@ -82,9 +86,11 @@ public class IcebergSourceFlatParquetDataWriteBenchmark extends IcebergSourceFla
         .withColumn("floatCol", expr("CAST(longCol AS FLOAT)"))
         .withColumn("doubleCol", expr("CAST(longCol AS DOUBLE)"))
         .withColumn("decimalCol", expr("CAST(longCol AS DECIMAL(20, 5))"))
-        .withColumn("dateCol", expr("DATE_ADD(CURRENT_DATE(), (longCol % 20))"))
+        .withColumn("dateCol", expr("DATE_ADD(CURRENT_DATE(), CAST (longCol % 20 AS INT))"))
         .withColumn("timestampCol", expr("TO_TIMESTAMP(dateCol)"))
         .withColumn("stringCol", expr("CAST(dateCol AS STRING)"))
-        .coalesce(1);
+        .withColumn("partCol", expr("CAST(dateCol AS STRING)"))
+        .coalesce(1)
+        .sort("partCol");
   }
 }

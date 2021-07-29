@@ -49,11 +49,16 @@ public abstract class IcebergSourceFlatDataBenchmark extends IcebergSourceBenchm
         optional(5, "decimalCol", Types.DecimalType.of(20, 5)),
         optional(6, "dateCol", Types.DateType.get()),
         optional(7, "timestampCol", Types.TimestampType.withZone()),
-        optional(8, "stringCol", Types.StringType.get()));
-    PartitionSpec partitionSpec = PartitionSpec.unpartitioned();
+        optional(8, "stringCol", Types.StringType.get()),
+        optional(9, "partCol", Types.StringType.get()));
+    PartitionSpec partitionSpec = PartitionSpec.builderFor(schema)
+        .identity("partCol")
+        .build();
+    // PartitionSpec partitionSpec = PartitionSpec.unpartitioned();
     HadoopTables tables = new HadoopTables(hadoopConf());
     Map<String, String> properties = Maps.newHashMap();
     properties.put(TableProperties.METADATA_COMPRESSION, "gzip");
+    // properties.put(TableProperties.SPARK_WRITE_PARTITIONED_FANOUT_ENABLED, "true");
     return tables.create(schema, partitionSpec, properties, newTableLocation());
   }
 }

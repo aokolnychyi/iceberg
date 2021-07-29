@@ -19,6 +19,8 @@
 
 package org.apache.iceberg.io;
 
+import java.util.Arrays;
+
 import org.apache.iceberg.StructLike;
 
 /**
@@ -58,5 +60,22 @@ class StructCopy implements StructLike {
   @Override
   public <T> void set(int pos, T value) {
     throw new UnsupportedOperationException("Struct copy cannot be modified");
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    } else if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+
+    StructCopy that = (StructCopy) obj;
+    return Arrays.equals(values, that.values);
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(values);
   }
 }
