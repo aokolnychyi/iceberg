@@ -22,6 +22,7 @@ import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.StringJoiner;
 import org.apache.iceberg.PartitionSpec;
@@ -190,9 +191,26 @@ public class PartitionSet extends AbstractSet<Pair<Integer, StructLike>> {
   }
 
   @Override
+  public int hashCode() {
+    int hashCode = 0;
+
+    for (Entry<Integer, Set<StructLike>> specIdAndPartitionSet : partitionSetById.entrySet()) {
+      int specId = specIdAndPartitionSet.getKey();
+      StructLikeWrapper structWrapper = StructLikeWrapper.forType(partitionTypeById.get(specId));
+      Set<StructLike> partitionSet = specIdAndPartitionSet.getValue();
+      for (StructLike struct : partitionSet) {
+        Pair<Integer, StructLikeWrapper> pair = Pair.of(specId, structWrapper.copyFor(struct));
+        hashCode += pair.hashCode();
+      }
+    }
+
+    return hashCode;
+  }
+
+  @Override
   public String toString() {
     StringJoiner result = new StringJoiner(", ", "[", "]");
-    for (Map.Entry<Integer, Set<StructLike>> e : partitionSetById.entrySet()) {
+    for (Entry<Integer, Set<StructLike>> e : partitionSetById.entrySet()) {
       StringJoiner partitionDataJoiner = new StringJoiner(", ");
       Types.StructType structType = partitionTypeById.get(e.getKey());
       for (StructLike s : e.getValue()) {

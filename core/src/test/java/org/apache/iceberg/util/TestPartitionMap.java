@@ -279,7 +279,9 @@ public class TestPartitionMap {
     map2.put(BY_DATA_SPEC.specId(), CustomRow.of("bbb"), "v2");
 
     assertThat(map1.keySet()).isEqualTo(map2.keySet());
+    assertThat(map1.keySet().hashCode()).isEqualTo(map2.keySet().hashCode());
     assertThat(map1.entrySet()).isEqualTo(map2.entrySet());
+    assertThat(map1.entrySet().hashCode()).isEqualTo(map2.entrySet().hashCode());
   }
 
   @Test
