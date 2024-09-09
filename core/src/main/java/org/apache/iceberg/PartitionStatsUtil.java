@@ -24,15 +24,12 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import org.apache.iceberg.data.GenericRecord;
-import org.apache.iceberg.data.Record;
-import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Comparators;
-import org.apache.iceberg.types.Types;
+import org.apache.iceberg.types.Types.StructType;
 import org.apache.iceberg.util.PartitionUtil;
+import org.apache.iceberg.util.StructLikeMap;
 import org.apache.iceberg.util.Tasks;
 import org.apache.iceberg.util.ThreadPools;
 import org.slf4j.Logger;
@@ -52,43 +49,53 @@ public class PartitionStatsUtil {
    * @return iterable {@link PartitionStats}
    */
   public static Iterable<PartitionStats> computeStats(Table table, Snapshot snapshot) {
-    Preconditions.checkState(table != null, "table cannot be null");
-    Preconditions.checkState(snapshot != null, "snapshot cannot be null");
+    Preconditions.checkArgument(table != null, "table cannot be null");
+    Preconditions.checkArgument(snapshot != null, "snapshot cannot be null");
 
-    Types.StructType partitionType = Partitioning.partitionType(table);
-    Map<Record, PartitionStats> partitionEntryMap = Maps.newConcurrentMap();
-
+    StructType partitionType = Partitioning.partitionType(table);
+    StructLikeMap<PartitionStats> statsMap = StructLikeMap.createConcurrent(partitionType);
     List<ManifestFile> manifestFiles = snapshot.allManifests(table.io());
+
     Tasks.foreach(manifestFiles)
         .stopOnFailure()
         .executeWith(ThreadPools.getWorkerPool())
-        .onFailure(
-            (file, thrown) ->
-                LOG.warn(
-                    "Failed to compute the partition stats for the manifest file: {}",
-                    file.path(),
-                    thrown))
-        .run(
-            manifest -> {
-              try (CloseableIterable<PartitionStats> entries =
-                  PartitionStatsUtil.fromManifest(table, manifest, partitionType)) {
-                entries.forEach(
-                    entry -> {
-                      Record partitionKey = entry.partition();
-                      partitionEntryMap.merge(
-                          partitionKey,
-                          entry,
-                          (existingEntry, newEntry) -> {
-                            existingEntry.appendStats(newEntry);
-                            return existingEntry;
-                          });
-                    });
-              } catch (IOException e) {
-                throw new UncheckedIOException(e);
-              }
-            });
+        .onFailure((file, e) -> LOG.warn("Failed to process manifest: {}", file.path(), e))
+        .run(manifest -> updateStats(table, manifest, partitionType, statsMap));
 
-    return partitionEntryMap.values();
+    return statsMap.values();
+  }
+
+  // TODO: this is super ugly and must be refactored into a few separate methods
+  private static void updateStats(
+      Table table,
+      ManifestFile manifest,
+      StructType partitionType,
+      Map<StructLike, PartitionStats> statsMap) {
+    try (ManifestReader<?> reader = openManifest(table, manifest)) {
+      for (ManifestEntry<?> entry : reader.entries()) {
+        Snapshot snapshot = table.snapshot(entry.snapshotId());
+        ContentFile<?> file = entry.file();
+        int specId = file.specId();
+        PartitionSpec spec = table.specs().get(specId);
+        StructLike partition = file.partition();
+        StructLike coercedPartition = PartitionUtil.coercePartition(partitionType, spec, partition);
+        PartitionStats stats =
+            statsMap.computeIfAbsent(
+                coercedPartition, ignored -> new PartitionStats(coercedPartition, specId));
+        if (entry.isLive()) {
+          stats.liveEntry(file, snapshot);
+        } else {
+          stats.deletedEntry(snapshot);
+        }
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  private static ManifestReader<?> openManifest(Table table, ManifestFile manifest) {
+    List<String> projection = BaseScan.scanColumns(manifest.content());
+    return ManifestFiles.open(manifest, table.io()).select(projection);
   }
 
   /**
@@ -99,47 +106,10 @@ public class PartitionStatsUtil {
    * @return Iterator of {@link PartitionStats}
    */
   public static Iterator<PartitionStats> sortStats(
-      Iterable<PartitionStats> stats, Types.StructType partitionType) {
+      Iterable<PartitionStats> stats, StructType partitionType) {
     List<PartitionStats> entries = Lists.newArrayList(stats.iterator());
     entries.sort(
         Comparator.comparing(PartitionStats::partition, Comparators.forType(partitionType)));
     return entries.iterator();
-  }
-
-  private static CloseableIterable<PartitionStats> fromManifest(
-      Table table, ManifestFile manifest, Types.StructType partitionType) {
-    return CloseableIterable.transform(
-        ManifestFiles.open(manifest, table.io(), table.specs())
-            .select(BaseScan.scanColumns(manifest.content()))
-            .entries(),
-        entry -> {
-          // partition data as per unified partition spec
-          Record partitionData = coercedPartitionData(entry.file(), table.specs(), partitionType);
-          PartitionStats partitionStats = new PartitionStats(partitionData);
-          if (entry.isLive()) {
-            partitionStats.liveEntry(entry.file(), table.snapshot(entry.snapshotId()));
-          } else {
-            partitionStats.deletedEntry(table.snapshot(entry.snapshotId()));
-          }
-
-          return partitionStats;
-        });
-  }
-
-  private static Record coercedPartitionData(
-      ContentFile<?> file, Map<Integer, PartitionSpec> specs, Types.StructType partitionType) {
-    // keep the partition data as per the unified spec by coercing
-    StructLike partition =
-        PartitionUtil.coercePartition(partitionType, specs.get(file.specId()), file.partition());
-    GenericRecord record = GenericRecord.create(partitionType);
-    for (int index = 0; index < partitionType.fields().size(); index++) {
-      Object val =
-          partition.get(index, partitionType.fields().get(index).type().typeId().javaClass());
-      if (val != null) {
-        record.set(index, val);
-      }
-    }
-
-    return record;
   }
 }

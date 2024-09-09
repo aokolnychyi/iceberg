@@ -20,6 +20,7 @@ package org.apache.iceberg.util;
 
 import java.util.AbstractMap;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -30,17 +31,21 @@ import org.apache.iceberg.types.Types;
 
 public class StructLikeMap<T> extends AbstractMap<StructLike, T> implements Map<StructLike, T> {
 
+  public static <T> StructLikeMap<T> createConcurrent(Types.StructType type) {
+    return new StructLikeMap<>(type, true /* concurrent */);
+  }
+
   public static <T> StructLikeMap<T> create(Types.StructType type) {
-    return new StructLikeMap<>(type);
+    return new StructLikeMap<>(type, false /* non-concurrent */);
   }
 
   private final Types.StructType type;
   private final Map<StructLikeWrapper, T> wrapperMap;
   private final ThreadLocal<StructLikeWrapper> wrappers;
 
-  private StructLikeMap(Types.StructType type) {
+  private StructLikeMap(Types.StructType type, boolean concurrent) {
     this.type = type;
-    this.wrapperMap = Maps.newHashMap();
+    this.wrapperMap = concurrent ? Maps.newConcurrentMap() : Maps.newHashMap();
     this.wrappers = ThreadLocal.withInitial(() -> StructLikeWrapper.forType(type));
   }
 
@@ -108,12 +113,12 @@ public class StructLikeMap<T> extends AbstractMap<StructLike, T> implements Map<
     for (StructLikeWrapper wrapper : wrapperMap.keySet()) {
       keySet.add(wrapper.get());
     }
-    return keySet;
+    return Collections.unmodifiableSet(keySet);
   }
 
   @Override
   public Collection<T> values() {
-    return wrapperMap.values();
+    return Collections.unmodifiableCollection(wrapperMap.values());
   }
 
   @Override
@@ -122,7 +127,7 @@ public class StructLikeMap<T> extends AbstractMap<StructLike, T> implements Map<
     for (Entry<StructLikeWrapper, T> entry : wrapperMap.entrySet()) {
       entrySet.add(new StructLikeEntry<>(entry));
     }
-    return entrySet;
+    return Collections.unmodifiableSet(entrySet);
   }
 
   private static class StructLikeEntry<R> implements Entry<StructLike, R> {

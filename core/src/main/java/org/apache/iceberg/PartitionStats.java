@@ -18,14 +18,13 @@
  */
 package org.apache.iceberg;
 
-import java.util.Objects;
-import org.apache.iceberg.data.Record;
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
-
+// TODO: use StructLikeWrapper for comparing PartitionStats as partition can be any StructLike
 public class PartitionStats implements StructLike {
 
-  private Record partition; // PartitionData as Record
-  private int specId;
+  private static final int STATS_COUNT = 12;
+
+  private final StructLike partition;
+  private final int specId;
   private long dataRecordCount;
   private int dataFileCount;
   private long totalDataFileSizeInBytes;
@@ -37,13 +36,12 @@ public class PartitionStats implements StructLike {
   private Long lastUpdatedAt; // null by default
   private Long lastUpdatedSnapshotId; // null by default
 
-  private static final int STATS_COUNT = 12;
-
-  public PartitionStats(Record partition) {
+  public PartitionStats(StructLike partition, int specId) {
     this.partition = partition;
+    this.specId = specId;
   }
 
-  public Record partition() {
+  public StructLike partition() {
     return partition;
   }
 
@@ -51,88 +49,44 @@ public class PartitionStats implements StructLike {
     return specId;
   }
 
-  public void setSpecId(int specId) {
-    this.specId = specId;
-  }
-
   public long dataRecordCount() {
     return dataRecordCount;
-  }
-
-  public void setDataRecordCount(long dataRecordCount) {
-    this.dataRecordCount = dataRecordCount;
   }
 
   public int dataFileCount() {
     return dataFileCount;
   }
 
-  public void setDataFileCount(int dataFileCount) {
-    this.dataFileCount = dataFileCount;
-  }
-
   public long totalDataFileSizeInBytes() {
     return totalDataFileSizeInBytes;
-  }
-
-  public void setTotalDataFileSizeInBytes(long totalDataFileSizeInBytes) {
-    this.totalDataFileSizeInBytes = totalDataFileSizeInBytes;
   }
 
   public long positionDeleteRecordCount() {
     return positionDeleteRecordCount;
   }
 
-  public void setPositionDeleteRecordCount(long positionDeleteRecordCount) {
-    this.positionDeleteRecordCount = positionDeleteRecordCount;
-  }
-
   public int positionDeleteFileCount() {
     return positionDeleteFileCount;
-  }
-
-  public void setPositionDeleteFileCount(int positionDeleteFileCount) {
-    this.positionDeleteFileCount = positionDeleteFileCount;
   }
 
   public long equalityDeleteRecordCount() {
     return equalityDeleteRecordCount;
   }
 
-  public void setEqualityDeleteRecordCount(long equalityDeleteRecordCount) {
-    this.equalityDeleteRecordCount = equalityDeleteRecordCount;
-  }
-
   public int equalityDeleteFileCount() {
     return equalityDeleteFileCount;
-  }
-
-  public void setEqualityDeleteFileCount(int equalityDeleteFileCount) {
-    this.equalityDeleteFileCount = equalityDeleteFileCount;
   }
 
   public long totalRecordCount() {
     return totalRecordCount;
   }
 
-  public void setTotalRecordCount(long totalRecordCount) {
-    this.totalRecordCount = totalRecordCount;
-  }
-
   public Long lastUpdatedAt() {
     return lastUpdatedAt;
   }
 
-  public void setLastUpdatedAt(Long lastUpdatedAt) {
-    this.lastUpdatedAt = lastUpdatedAt;
-  }
-
   public Long lastUpdatedSnapshotId() {
     return lastUpdatedSnapshotId;
-  }
-
-  public void setLastUpdatedSnapshotId(Long lastUpdatedSnapshotId) {
-    this.lastUpdatedSnapshotId = lastUpdatedSnapshotId;
   }
 
   /**
@@ -142,31 +96,27 @@ public class PartitionStats implements StructLike {
    * @param snapshot the snapshot corresponding to the live entry.
    */
   public void liveEntry(ContentFile<?> file, Snapshot snapshot) {
-    Preconditions.checkState(file != null, "content file cannot be null");
-
-    specId = file.specId();
-
     switch (file.content()) {
       case DATA:
-        dataRecordCount = file.recordCount();
-        dataFileCount = 1;
-        totalDataFileSizeInBytes = file.fileSizeInBytes();
+        this.dataRecordCount = file.recordCount();
+        this.dataFileCount = 1;
+        this.totalDataFileSizeInBytes = file.fileSizeInBytes();
         break;
       case POSITION_DELETES:
-        positionDeleteRecordCount = file.recordCount();
-        positionDeleteFileCount = 1;
+        this.positionDeleteRecordCount = file.recordCount();
+        this.positionDeleteFileCount = 1;
         break;
       case EQUALITY_DELETES:
-        equalityDeleteRecordCount = file.recordCount();
-        equalityDeleteFileCount = 1;
+        this.equalityDeleteRecordCount = file.recordCount();
+        this.equalityDeleteFileCount = 1;
         break;
       default:
         throw new UnsupportedOperationException("Unsupported file content type: " + file.content());
     }
 
     if (snapshot != null) {
-      lastUpdatedSnapshotId = snapshot.snapshotId();
-      lastUpdatedAt = snapshot.timestampMillis();
+      this.lastUpdatedSnapshotId = snapshot.snapshotId();
+      this.lastUpdatedAt = snapshot.timestampMillis();
     }
 
     // Note: Not computing the `TOTAL_RECORD_COUNT` for now as it needs scanning the data.
@@ -179,34 +129,8 @@ public class PartitionStats implements StructLike {
    */
   public void deletedEntry(Snapshot snapshot) {
     if (snapshot != null && lastUpdatedAt != null && snapshot.timestampMillis() > lastUpdatedAt) {
-      lastUpdatedAt = snapshot.timestampMillis();
-      lastUpdatedSnapshotId = snapshot.snapshotId();
-    }
-  }
-
-  /**
-   * Appends statistics from given entry to current entry.
-   *
-   * @param entry the entry from which statistics will be sourced.
-   */
-  public void appendStats(PartitionStats entry) {
-    Preconditions.checkState(entry != null, "entry to update from cannot be null");
-
-    specId = Math.max(specId, entry.specId);
-    dataRecordCount += entry.dataRecordCount;
-    dataFileCount += entry.dataFileCount;
-    totalDataFileSizeInBytes += entry.totalDataFileSizeInBytes;
-    positionDeleteRecordCount += entry.positionDeleteRecordCount;
-    positionDeleteFileCount += entry.positionDeleteFileCount;
-    equalityDeleteRecordCount += entry.equalityDeleteRecordCount;
-    equalityDeleteFileCount += entry.equalityDeleteFileCount;
-    totalRecordCount += entry.totalRecordCount;
-
-    if (entry.lastUpdatedAt != null) {
-      if (lastUpdatedAt == null || (lastUpdatedAt < entry.lastUpdatedAt)) {
-        lastUpdatedAt = entry.lastUpdatedAt;
-        lastUpdatedSnapshotId = entry.lastUpdatedSnapshotId;
-      }
+      this.lastUpdatedAt = snapshot.timestampMillis();
+      this.lastUpdatedSnapshotId = snapshot.snapshotId();
     }
   }
 
@@ -249,91 +173,6 @@ public class PartitionStats implements StructLike {
 
   @Override
   public <T> void set(int pos, T value) {
-    switch (pos) {
-      case 0:
-        partition = (Record) value;
-        break;
-      case 1:
-        specId = (int) value;
-        break;
-      case 2:
-        dataRecordCount = (long) value;
-        break;
-      case 3:
-        dataFileCount = (int) value;
-        break;
-      case 4:
-        totalDataFileSizeInBytes = (long) value;
-        break;
-      case 5:
-        // optional field as per spec, implementation initialize to 0 for counters
-        positionDeleteRecordCount = value == null ? 0L : (long) value;
-        break;
-      case 6:
-        // optional field as per spec, implementation initialize to 0 for counters
-        positionDeleteFileCount = value == null ? 0 : (int) value;
-        break;
-      case 7:
-        // optional field as per spec, implementation initialize to 0 for counters
-        equalityDeleteRecordCount = value == null ? 0L : (long) value;
-        break;
-      case 8:
-        // optional field as per spec, implementation initialize to 0 for counters
-        equalityDeleteFileCount = value == null ? 0 : (int) value;
-        break;
-      case 9:
-        // optional field as per spec, implementation initialize to 0 for counters
-        totalRecordCount = value == null ? 0L : (long) value;
-        break;
-      case 10:
-        lastUpdatedAt = (Long) value;
-        break;
-      case 11:
-        lastUpdatedSnapshotId = (Long) value;
-        break;
-      default:
-        throw new UnsupportedOperationException("Unknown position: " + pos);
-    }
-  }
-
-  @Override
-  @SuppressWarnings("checkstyle:CyclomaticComplexity")
-  public boolean equals(Object other) {
-    if (this == other) {
-      return true;
-    } else if (!(other instanceof PartitionStats)) {
-      return false;
-    }
-
-    PartitionStats that = (PartitionStats) other;
-    return Objects.equals(partition, that.partition)
-        && specId == that.specId
-        && dataRecordCount == that.dataRecordCount
-        && dataFileCount == that.dataFileCount
-        && totalDataFileSizeInBytes == that.totalDataFileSizeInBytes
-        && positionDeleteRecordCount == that.positionDeleteRecordCount
-        && positionDeleteFileCount == that.positionDeleteFileCount
-        && equalityDeleteRecordCount == that.equalityDeleteRecordCount
-        && equalityDeleteFileCount == that.equalityDeleteFileCount
-        && totalRecordCount == that.totalRecordCount
-        && Objects.equals(lastUpdatedAt, that.lastUpdatedAt)
-        && Objects.equals(lastUpdatedSnapshotId, that.lastUpdatedSnapshotId);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(
-        partition,
-        specId,
-        dataRecordCount,
-        dataFileCount,
-        totalDataFileSizeInBytes,
-        positionDeleteRecordCount,
-        positionDeleteFileCount,
-        equalityDeleteRecordCount,
-        equalityDeleteFileCount,
-        totalRecordCount,
-        lastUpdatedAt,
-        lastUpdatedSnapshotId);
+    throw new UnsupportedOperationException("SET IS FINE, IMPL MUST BE UPDATED");
   }
 }
