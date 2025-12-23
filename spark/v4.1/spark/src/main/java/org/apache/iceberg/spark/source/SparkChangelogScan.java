@@ -67,8 +67,7 @@ class SparkChangelogScan implements Scan, SupportsReportStatistics {
       IncrementalChangelogScan scan,
       SparkReadConf readConf,
       Schema expectedSchema,
-      List<Expression> filters,
-      boolean emptyScan) {
+      List<Expression> filters) {
 
     SparkSchemaUtil.validateMetadataColumnReferences(table.schema(), expectedSchema);
 
@@ -80,7 +79,7 @@ class SparkChangelogScan implements Scan, SupportsReportStatistics {
     this.filters = filters != null ? filters : Collections.emptyList();
     this.startSnapshotId = readConf.startSnapshotId();
     this.endSnapshotId = readConf.endSnapshotId();
-    if (emptyScan) {
+    if (scan == null) {
       this.taskGroups = Collections.emptyList();
     }
   }
@@ -148,6 +147,7 @@ class SparkChangelogScan implements Scan, SupportsReportStatistics {
 
     SparkChangelogScan that = (SparkChangelogScan) o;
     return table.name().equals(that.table.name())
+        && Objects.equals(table.uuid(), that.table.uuid())
         && readSchema().equals(that.readSchema()) // compare Spark schemas to ignore field IDs
         && filtersDesc().equals(that.filtersDesc())
         && Objects.equals(startSnapshotId, that.startSnapshotId)
@@ -156,7 +156,8 @@ class SparkChangelogScan implements Scan, SupportsReportStatistics {
 
   @Override
   public int hashCode() {
-    return Objects.hash(table.name(), readSchema(), filtersDesc(), startSnapshotId, endSnapshotId);
+    return Objects.hash(
+        table.name(), table.uuid(), readSchema(), filtersDesc(), startSnapshotId, endSnapshotId);
   }
 
   private String filtersDesc() {

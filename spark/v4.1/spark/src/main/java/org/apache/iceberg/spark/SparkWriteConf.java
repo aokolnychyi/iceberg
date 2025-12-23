@@ -86,7 +86,6 @@ public class SparkWriteConf {
 
   private final SparkSession spark;
   private final Table table;
-  private final String branch;
   private final RuntimeConfig sessionConf;
   private final CaseInsensitiveStringMap options;
   private final SparkConfParser confParser;
@@ -103,7 +102,6 @@ public class SparkWriteConf {
       SparkSession spark, Table table, String branch, CaseInsensitiveStringMap options) {
     this.spark = spark;
     this.table = table;
-    this.branch = branch;
     this.sessionConf = spark.conf();
     this.options = options;
     this.confParser = new SparkConfParser(spark, table, options);
@@ -449,9 +447,10 @@ public class SparkWriteConf {
   }
 
   public IsolationLevel isolationLevel() {
-    String isolationLevelName =
-        confParser.stringConf().option(SparkWriteOptions.ISOLATION_LEVEL).parseOptional();
-    return isolationLevelName != null ? IsolationLevel.fromName(isolationLevelName) : null;
+    return confParser
+        .enumConf(IsolationLevel::fromName)
+        .option(SparkWriteOptions.ISOLATION_LEVEL)
+        .parseOptional();
   }
 
   public boolean caseSensitive() {
@@ -460,10 +459,6 @@ public class SparkWriteConf {
         .sessionConf(SQLConf.CASE_SENSITIVE().key())
         .defaultValue(SQLConf.CASE_SENSITIVE().defaultValueString())
         .parse();
-  }
-
-  public String branch() {
-    return SparkTableUtil.determineWriteBranch(spark, table, branch, options);
   }
 
   public Map<String, String> writeProperties() {
